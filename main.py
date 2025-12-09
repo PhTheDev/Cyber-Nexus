@@ -2,7 +2,7 @@
 """
 Cyber Nexus - Jogo Educacional de Algoritmos de Grafos
 Autores: Pedro Henrique Faria e Caio Leal Granja
-Versão Modificada
+Versão Corrigida para 1920x1080 - Bug de botões corrigido
 """
 
 import pygame
@@ -15,9 +15,9 @@ from enum import Enum
 # Inicialização do Pygame
 pygame.init()
 
-# Constantes
-SCREEN_WIDTH = 1280
-SCREEN_HEIGHT = 720
+# Constantes para 1920x1080
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
 FPS = 60
 
 # Cores Cyberpunk
@@ -57,7 +57,7 @@ class Node:
         self.visited = False
         self.in_path = False
         self.neighbors = []
-        self.radius = 25
+        self.radius = 35
         self.glow = 0
         self.selected = False
         
@@ -86,11 +86,11 @@ class Node:
         pygame.draw.circle(screen, color, (int(self.x), int(self.y)), self.radius)
         
         # Borda mais grossa se selecionado
-        border_width = 4 if self.selected else 2
+        border_width = 6 if self.selected else 3
         pygame.draw.circle(screen, (255, 255, 255), (int(self.x), int(self.y)), self.radius, border_width)
         
         # Desenhar ID
-        font = pygame.font.Font(None, 24)
+        font = pygame.font.Font(None, 36)
         text = font.render(str(self.id), True, (0, 0, 0))
         text_rect = text.get_rect(center=(int(self.x), int(self.y)))
         screen.blit(text, text_rect)
@@ -108,10 +108,10 @@ class Edge:
     def draw(self, screen):
         if self.player_selected:
             color = COLOR_EDGE_PLAYER
-            width = 5
+            width = 7
         else:
             color = COLOR_EDGE
-            width = 2
+            width = 3
         pygame.draw.line(screen, color, 
                         (int(self.node1.x), int(self.node1.y)),
                         (int(self.node2.x), int(self.node2.y)), width)
@@ -125,13 +125,32 @@ class Button:
         
     def draw(self, screen):
         color = COLOR_BUTTON_HOVER if self.hovered else COLOR_BUTTON
-        pygame.draw.rect(screen, color, self.rect, border_radius=8)
-        pygame.draw.rect(screen, COLOR_NODE, self.rect, 3, border_radius=8)
+        pygame.draw.rect(screen, color, self.rect, border_radius=12)
+        pygame.draw.rect(screen, COLOR_NODE, self.rect, 4, border_radius=12)
         
-        font = pygame.font.Font(None, 32)
-        text = font.render(self.text, True, COLOR_TEXT)
-        text_rect = text.get_rect(center=self.rect.center)
-        screen.blit(text, text_rect)
+        # Ajustar tamanho da fonte baseado no comprimento do texto
+        font_size = 36
+        if len(self.text) > 15:
+            font_size = 30
+        elif len(self.text) > 12:
+            font_size = 32
+            
+        font = pygame.font.Font(None, font_size)
+        text_surface = font.render(self.text, True, COLOR_TEXT)
+        
+        # Verificar se o texto cabe no botão
+        text_width, text_height = text_surface.get_size()
+        max_width = self.rect.width - 20  # Margem de 10 pixels em cada lado
+        max_height = self.rect.height - 10  # Margem de 5 pixels em cada lado
+        
+        if text_width > max_width:
+            # Reduzir fonte se necessário
+            font_size = int(font_size * (max_width / text_width))
+            font = pygame.font.Font(None, font_size)
+            text_surface = font.render(self.text, True, COLOR_TEXT)
+        
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        screen.blit(text_surface, text_rect)
         
     def handle_event(self, event):
         if event.type == pygame.MOUSEMOTION:
@@ -178,15 +197,15 @@ class Graph:
             is_start = (node == self.start_node)
             node.draw(screen, is_start)
 
-def generate_random_graph(num_nodes=12, min_x=150, max_x=950, min_y=150, max_y=550):
-    """Gera um grafo aleatório conectado"""
+def generate_random_graph(num_nodes=12, min_x=250, max_x=1670, min_y=250, max_y=750):
+    """Gera um grafo aleatório conectado com múltiplos caminhos"""
     graph = Graph()
     nodes = []
     
     # Criar nós com posições aleatórias
     for i in range(num_nodes):
-        # Garantir espaçamento mínimo entre nós
-        while True:
+        attempts = 0
+        while attempts < 50:
             x = random.randint(min_x, max_x)
             y = random.randint(min_y, max_y)
             
@@ -194,14 +213,15 @@ def generate_random_graph(num_nodes=12, min_x=150, max_x=950, min_y=150, max_y=5
             valid = True
             for node in nodes:
                 dist = math.sqrt((node.x - x) ** 2 + (node.y - y) ** 2)
-                if dist < 80:  # Distância mínima
+                if dist < 120:  # Aumentada distância mínima
                     valid = False
                     break
             
             if valid:
                 break
+            attempts += 1
         
-        is_target = (i == num_nodes - 1)  # Último nó é o alvo
+        is_target = (i == num_nodes - 1)
         node = Node(i + 1, x, y, is_target)
         nodes.append(node)
         graph.add_node(node)
@@ -209,39 +229,90 @@ def generate_random_graph(num_nodes=12, min_x=150, max_x=950, min_y=150, max_y=5
     # Primeiro nó é o inicial
     graph.start_node = nodes[0]
     
-    # Criar árvore geradora mínima para garantir conectividade
+    # FASE 1: Criar árvore geradora mínima
     connected = [nodes[0]]
     unconnected = nodes[1:]
     
-    while unconnected:
-        # Escolher um nó conectado aleatório
-        node1 = random.choice(connected)
-        
-        # Encontrar o nó não conectado mais próximo
-        closest = min(unconnected, key=lambda n: math.sqrt((n.x - node1.x)**2 + (n.y - node1.y)**2))
-        
-        graph.add_edge(node1, closest)
-        connected.append(closest)
-        unconnected.remove(closest)
+    tree_edges = []
     
-    # Adicionar arestas extras aleatórias (30-50% dos nós)
-    extra_edges = random.randint(num_nodes // 3, num_nodes // 2)
-    for _ in range(extra_edges):
+    while unconnected:
+        best_pair = None
+        best_distance = float('inf')
+        
+        for uc in unconnected:
+            for c in connected:
+                dist = math.sqrt((uc.x - c.x)**2 + (uc.y - c.y)**2)
+                if dist < best_distance:
+                    best_distance = dist
+                    best_pair = (c, uc)
+        
+        if best_pair:
+            node1, node2 = best_pair
+            graph.add_edge(node1, node2)
+            tree_edges.append((node1, node2))
+            connected.append(node2)
+            unconnected.remove(node2)
+    
+    # FASE 2: Adicionar arestas extras
+    target_node = nodes[-1]
+    potential_target_connections = []
+    
+    for node in nodes[:-1]:
+        if node not in target_node.neighbors:
+            dist = math.sqrt((node.x - target_node.x)**2 + (node.y - target_node.y)**2)
+            if dist < 500:
+                potential_target_connections.append((node, dist))
+    
+    potential_target_connections.sort(key=lambda x: x[1])
+    num_target_edges = min(4, len(potential_target_connections))
+    
+    for i in range(num_target_edges):
+        if i < len(potential_target_connections):
+            node = potential_target_connections[i][0]
+            if node not in target_node.neighbors:
+                graph.add_edge(node, target_node)
+    
+    # Adicionar mais arestas para conectar o grafo
+    num_extra_edges = random.randint(num_nodes * 2, num_nodes * 3)
+    
+    for _ in range(num_extra_edges):
         node1 = random.choice(nodes)
         node2 = random.choice(nodes)
         
-        # Verificar se não são o mesmo nó e se já não estão conectados
-        if node1 != node2 and node2 not in node1.neighbors:
-            # Verificar distância para não criar arestas muito longas
+        if (node1 != node2 and 
+            node2 not in node1.neighbors and 
+            (node1, node2) not in tree_edges and 
+            (node2, node1) not in tree_edges):
+            
             dist = math.sqrt((node1.x - node2.x)**2 + (node1.y - node2.y)**2)
-            if dist < 300:
-                graph.add_edge(node1, node2)
+            max_dist = 600 if num_nodes > 10 else 500
+            
+            if dist < max_dist:
+                prob = 0.7 - (dist / max_dist) * 0.4
+                if random.random() < prob:
+                    graph.add_edge(node1, node2)
+    
+    # Garantir conectividade mínima
+    for node in nodes:
+        if node != graph.start_node and node != target_node:
+            if len(node.neighbors) < 2:
+                candidates = [n for n in nodes 
+                            if n != node and 
+                            n not in node.neighbors]
+                
+                if candidates:
+                    # Escolher o mais próximo
+                    candidates.sort(key=lambda n: math.sqrt((n.x - node.x)**2 + (n.y - node.y)**2))
+                    for candidate in candidates:
+                        if candidate not in node.neighbors:
+                            graph.add_edge(node, candidate)
+                            break
     
     return graph
 
 class CyberNexus:
     def __init__(self):
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Cyber Nexus - Jogo Educacional de Grafos")
         self.clock = pygame.time.Clock()
         self.running = True
@@ -259,17 +330,21 @@ class CyberNexus:
         self.phase1_completed = False
         self.phase2_completed = False
         
+        # Armazenar grafo atual para reutilização
+        self.current_graph_state = None
+        self.current_phase = None
+        
         self.buttons = []
         self.setup_main_menu()
         
     def setup_main_menu(self):
         """Tela principal do jogo"""
         self.buttons = [
-            Button(SCREEN_WIDTH // 2 - 150, 300, 300, 60, "TUTORIAL", 
+            Button(SCREEN_WIDTH//2 - 200, 400, 400, 80, "TUTORIAL", 
                    lambda: self.change_state(GameState.TUTORIAL_INTRO)),
-            Button(SCREEN_WIDTH // 2 - 150, 390, 300, 60, "COMEÇAR A JOGAR", 
+            Button(SCREEN_WIDTH//2 - 200, 520, 400, 80, "COMEÇAR A JOGAR", 
                    lambda: self.change_state(GameState.PHASE_1_INTRO)),
-            Button(SCREEN_WIDTH // 2 - 150, 480, 300, 60, "SAIR", 
+            Button(SCREEN_WIDTH//2 - 200, 640, 400, 80, "SAIR", 
                    lambda: self.quit_game()),
         ]
         
@@ -302,9 +377,9 @@ class CyberNexus:
     def setup_tutorial_intro(self):
         """Introdução do tutorial"""
         self.buttons = [
-            Button(SCREEN_WIDTH // 2 + 10, 630, 280, 60, "COMEÇAR TUTORIAL", 
+            Button(SCREEN_WIDTH//2 + 50, 850, 350, 80, "COMEÇAR TUTORIAL", 
                    lambda: self.change_state(GameState.TUTORIAL_PLAY)),
-            Button(SCREEN_WIDTH // 2 - 290, 630, 280, 60, "VOLTAR", 
+            Button(SCREEN_WIDTH//2 - 400, 850, 350, 80, "VOLTAR", 
                    lambda: self.change_state(GameState.MAIN_MENU)),
         ]
         
@@ -312,11 +387,11 @@ class CyberNexus:
         """Tutorial interativo"""
         self.graph = Graph()
         
-        # Criar grafo simples (mais centralizado)
-        node1 = Node(1, 400, 360)
-        node2 = Node(2, 600, 360)
-        node3 = Node(3, 800, 360)
-        node4 = Node(4, 1000, 360, is_target=True)
+        # Criar grafo simples
+        node1 = Node(1, 600, 540)
+        node2 = Node(2, 900, 540)
+        node3 = Node(3, 1200, 540)
+        node4 = Node(4, 1500, 540, is_target=True)
         
         self.graph.add_node(node1)
         self.graph.add_node(node2)
@@ -330,104 +405,177 @@ class CyberNexus:
         self.graph.start_node = node1
         
         self.buttons = [
-            Button(SCREEN_WIDTH // 2 + 10, 620, 280, 60, "COMEÇAR A JOGAR", 
+            Button(100, 950, 300, 80, "RESETAR CAMINHO",
+                   lambda: self.reset_current_path()),
+            Button(SCREEN_WIDTH//2 - 150, 950, 300, 80, "COMEÇAR A JOGAR", 
                    lambda: self.change_state(GameState.PHASE_1_INTRO)),
-            Button(SCREEN_WIDTH // 2 - 290, 620, 280, 60, "VOLTAR", 
+            Button(SCREEN_WIDTH - 400, 950, 300, 80, "VOLTAR", 
                    lambda: self.change_state(GameState.MAIN_MENU)),
         ]
         
         self.message = "Clique nos nós em sequência para criar um caminho!"
+        self.current_graph_state = None
+        self.current_phase = "tutorial"
         
     def setup_phase_1_intro(self):
         """Introdução da Fase 1 - BFS"""
         self.buttons = [
-            Button(SCREEN_WIDTH // 2 + 10, 630, 280, 60, "JOGAR FASE 1", 
+            Button(SCREEN_WIDTH//2 + 50, 850, 350, 80, "JOGAR FASE 1", 
                    lambda: self.change_state(GameState.PHASE_1_PLAY)),
-            Button(SCREEN_WIDTH // 2 - 290, 630, 280, 60, "VOLTAR", 
+            Button(SCREEN_WIDTH//2 - 400, 850, 350, 80, "VOLTAR", 
                    lambda: self.change_state(GameState.MAIN_MENU)),
         ]
         
     def setup_phase_1_play(self):
         """Fase 1 - BFS com grafo aleatório"""
-        self.graph = generate_random_graph(12)
+        if self.current_phase == "phase1" and self.current_graph_state:
+            self.graph = self.current_graph_state
+            self.graph.reset()
+        else:
+            self.graph = generate_random_graph(12)
+            self.current_graph_state = self.graph
+            self.current_phase = "phase1"
+        
         self.player_path = []
         self.selected_node = None
         
+        self.show_available_paths()
+        
         self.buttons = [
-            Button(50, 650, 200, 50, "VERIFICAR", 
+            Button(100, 950, 250, 70, "VERIFICAR", 
                    lambda: self.verify_bfs()),
-            Button(270, 650, 200, 50, "RESETAR", 
-                   lambda: self.reset_phase()),
-            Button(SCREEN_WIDTH - 250, 650, 200, 50, "MENU", 
+            Button(380, 950, 280, 70, "RESETAR CAMINHO", 
+                   lambda: self.reset_current_path()),
+            Button(690, 950, 250, 70, "NOVO GRAFO", 
+                   lambda: self.new_graph()),
+            Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU", 
                    lambda: self.change_state(GameState.MAIN_MENU)),
         ]
         
-        self.message = "Clique nos nós para criar um caminho BFS do nó verde ao vermelho!"
+        if not self.message:
+            self.message = "Clique nos nós para criar um caminho BFS do nó verde ao vermelho!"
         
     def setup_phase_2_intro(self):
         """Introdução da Fase 2 - DFS"""
         self.buttons = [
-            Button(SCREEN_WIDTH // 2 + 10, 630, 280, 60, "JOGAR FASE 2", 
+            Button(SCREEN_WIDTH//2 + 50, 850, 350, 80, "JOGAR FASE 2", 
                    lambda: self.change_state(GameState.PHASE_2_PLAY)),
-            Button(SCREEN_WIDTH // 2 - 290, 630, 280, 60, "VOLTAR", 
+            Button(SCREEN_WIDTH//2 - 400, 850, 350, 80, "VOLTAR", 
                    lambda: self.change_state(GameState.MAIN_MENU)),
         ]
         
     def setup_phase_2_play(self):
         """Fase 2 - DFS com grafo aleatório"""
-        self.graph = generate_random_graph(12)
+        if self.current_phase == "phase2" and self.current_graph_state:
+            self.graph = self.current_graph_state
+            self.graph.reset()
+        else:
+            self.graph = generate_random_graph(12)
+            self.current_graph_state = self.graph
+            self.current_phase = "phase2"
+        
         self.player_path = []
         self.selected_node = None
         
+        self.show_available_paths()
+        
         self.buttons = [
-            Button(50, 650, 200, 50, "VERIFICAR", 
+            Button(100, 950, 250, 70, "VERIFICAR", 
                    lambda: self.verify_dfs()),
-            Button(270, 650, 200, 50, "RESETAR", 
-                   lambda: self.reset_phase()),
-            Button(SCREEN_WIDTH - 250, 650, 200, 50, "MENU", 
+            Button(380, 950, 280, 70, "RESETAR CAMINHO", 
+                   lambda: self.reset_current_path()),
+            Button(690, 950, 250, 70, "NOVO GRAFO", 
+                   lambda: self.new_graph()),
+            Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU", 
                    lambda: self.change_state(GameState.MAIN_MENU)),
         ]
         
-        self.message = "Clique nos nós para criar um caminho DFS do nó verde ao vermelho!"
+        if not self.message:
+            self.message = "Clique nos nós para criar um caminho DFS do nó verde ao vermelho!"
         
     def setup_victory(self):
         """Tela de vitória"""
         self.buttons = [
-            Button(SCREEN_WIDTH // 2 - 150, 630, 300, 60, "VOLTAR AO MENU", 
+            Button(SCREEN_WIDTH//2 - 200, 850, 400, 80, "VOLTAR AO MENU", 
                    lambda: self.change_state(GameState.MAIN_MENU)),
         ]
         
-    def reset_phase(self):
-        """Resetar a fase atual"""
+    def reset_current_path(self):
+        """Reseta apenas o caminho do jogador, mantendo o mesmo grafo"""
+        self.graph.reset()
+        self.player_path = []
+        self.selected_node = None
+        self.message = "Caminho resetado! Tente novamente no mesmo grafo."
+        self.message_color = COLOR_TEXT
+        
+        # Recriar botões originais da fase atual
         if self.state == GameState.PHASE_1_PLAY:
-            self.setup_phase_1_play()
+            self.buttons = [
+                Button(100, 950, 250, 70, "VERIFICAR", 
+                       lambda: self.verify_bfs()),
+                Button(380, 950, 280, 70, "RESETAR CAMINHO", 
+                       lambda: self.reset_current_path()),
+                Button(690, 950, 250, 70, "NOVO GRAFO", 
+                       lambda: self.new_graph()),
+                Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU", 
+                       lambda: self.change_state(GameState.MAIN_MENU)),
+            ]
         elif self.state == GameState.PHASE_2_PLAY:
-            self.setup_phase_2_play()
+            self.buttons = [
+                Button(100, 950, 250, 70, "VERIFICAR", 
+                       lambda: self.verify_dfs()),
+                Button(380, 950, 280, 70, "RESETAR CAMINHO", 
+                       lambda: self.reset_current_path()),
+                Button(690, 950, 250, 70, "NOVO GRAFO", 
+                       lambda: self.new_graph()),
+                Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU", 
+                       lambda: self.change_state(GameState.MAIN_MENU)),
+            ]
         elif self.state == GameState.TUTORIAL_PLAY:
-            self.setup_tutorial_play()
-            
+            self.buttons = [
+                Button(100, 950, 300, 80, "RESETAR CAMINHO",
+                       lambda: self.reset_current_path()),
+                Button(SCREEN_WIDTH//2 - 150, 950, 300, 80, "COMEÇAR A JOGAR", 
+                       lambda: self.change_state(GameState.PHASE_1_INTRO)),
+                Button(SCREEN_WIDTH - 400, 950, 300, 80, "VOLTAR", 
+                       lambda: self.change_state(GameState.MAIN_MENU)),
+            ]
+        
+        if self.state in [GameState.PHASE_1_PLAY, GameState.PHASE_2_PLAY]:
+            self.show_available_paths()
+    
+    def new_graph(self):
+        """Gera um novo grafo aleatório"""
+        if self.state == GameState.PHASE_1_PLAY:
+            self.current_graph_state = None
+            self.setup_phase_1_play()
+            self.message = "Novo grafo gerado! Tente encontrar o caminho BFS."
+        elif self.state == GameState.PHASE_2_PLAY:
+            self.current_graph_state = None
+            self.setup_phase_2_play()
+            self.message = "Novo grafo gerado! Tente encontrar o caminho DFS."
+        self.message_color = COLOR_TEXT
+        
     def handle_node_click(self, pos):
         """Lidar com clique em nós"""
         for node in self.graph.nodes:
             if node.contains_point(pos[0], pos[1]):
-                # Se é o primeiro clique, deve ser o nó inicial
                 if not self.player_path:
                     if node == self.graph.start_node:
                         self.player_path.append(node)
                         node.in_path = True
                         self.message = f"Nó {node.id} selecionado! Continue o caminho..."
+                        self.message_color = COLOR_TEXT
                     else:
                         self.message = "Você deve começar pelo nó VERDE (inicial)!"
                         self.message_color = COLOR_ERROR
                 else:
-                    # Verificar se o nó é vizinho do último nó selecionado
                     last_node = self.player_path[-1]
                     
                     if node in last_node.neighbors and node not in self.player_path:
                         self.player_path.append(node)
                         node.in_path = True
                         
-                        # Marcar aresta como selecionada
                         for edge in self.graph.edges:
                             if (edge.node1 == last_node and edge.node2 == node) or \
                                (edge.node1 == node and edge.node2 == last_node):
@@ -445,8 +593,35 @@ class CyberNexus:
                     else:
                         self.message = "Este nó não é vizinho do último nó selecionado!"
                         self.message_color = COLOR_ERROR
-                break
+                return
                 
+    def show_available_paths(self):
+        """Mostra quantos caminhos diferentes existem até o alvo"""
+        if self.state not in [GameState.PHASE_1_PLAY, GameState.PHASE_2_PLAY]:
+            return
+        
+        def count_paths_dfs(current, target, visited, path_count):
+            if current == target:
+                return path_count + 1
+            
+            visited.add(current)
+            
+            for neighbor in current.neighbors:
+                if neighbor not in visited:
+                    path_count = count_paths_dfs(neighbor, target, visited, path_count)
+            
+            visited.remove(current)
+            return path_count
+        
+        visited = set()
+        num_paths = count_paths_dfs(self.graph.start_node, self.graph.target_node, visited, 0)
+        
+        path_info = f"Há {num_paths} caminho(s) possível(is) até o alvo."
+        
+        if self.message_color != COLOR_ERROR:
+            self.message = path_info
+            self.message_color = COLOR_TEXT
+    
     def verify_bfs(self):
         """Verificar se o caminho do jogador é um BFS válido"""
         if not self.player_path:
@@ -492,19 +667,20 @@ class CyberNexus:
         bfs_path.reverse()
         
         # Verificar se o caminho do jogador segue a ordem BFS
-        # O caminho do jogador deve visitar os nós na mesma ordem de níveis que o BFS
         if self.player_path == bfs_path:
             self.message = "🎉 SUCESSO! Sistema hackeado! Você executou um BFS perfeito!"
             self.message_color = COLOR_SUCCESS
             self.phase1_completed = True
             
-            # Avançar para próxima fase
             self.buttons = [
-                Button(SCREEN_WIDTH // 2 - 150, 650, 300, 50, "PRÓXIMA FASE", 
+                Button(100, 950, 280, 70, "CONTINUAR PRATICANDO",
+                       lambda: self.reset_current_path()),
+                Button(410, 950, 250, 70, "NOVO GRAFO",
+                       lambda: self.new_graph()),
+                Button(SCREEN_WIDTH//2 + 50, 950, 300, 70, "PRÓXIMA FASE", 
                        lambda: self.change_state(GameState.PHASE_2_INTRO)),
             ]
         else:
-            # Verificar se pelo menos é um caminho válido
             is_valid_path = True
             for i in range(len(self.player_path) - 1):
                 if self.player_path[i+1] not in self.player_path[i].neighbors:
@@ -512,11 +688,110 @@ class CyberNexus:
                     break
             
             if is_valid_path:
-                self.message = "Caminho válido, mas não segue a ordem BFS correta. Tente novamente!"
+                bfs_path_ids = [str(node.id) for node in bfs_path]
+                player_path_ids = [str(node.id) for node in self.player_path]
+                
+                self.message = f"Caminho válido, mas não é BFS ótimo. Caminho BFS correto: {' → '.join(bfs_path_ids)}"
                 self.message_color = COLOR_ERROR
+                
+                self.buttons = [
+                    Button(100, 950, 250, 70, "TENTAR NOVAMENTE",
+                           lambda: self.reset_current_path()),
+                    Button(380, 950, 300, 70, "VER CAMINHO CORRETO",
+                           lambda: self.show_correct_path(bfs_path)),
+                    Button(710, 950, 250, 70, "NOVO GRAFO",
+                           lambda: self.new_graph()),
+                    Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU",
+                           lambda: self.change_state(GameState.MAIN_MENU)),
+                ]
             else:
                 self.message = "Caminho inválido! Verifique as conexões."
                 self.message_color = COLOR_ERROR
+    
+    def show_correct_path(self, correct_path):
+        """Mostra o caminho correto ao jogador"""
+        self.graph.reset()
+        
+        for i in range(len(correct_path) - 1):
+            node1 = correct_path[i]
+            node2 = correct_path[i + 1]
+            node1.in_path = True
+            node2.in_path = True
+            
+            for edge in self.graph.edges:
+                if (edge.node1 == node1 and edge.node2 == node2) or \
+                   (edge.node1 == node2 and edge.node2 == node1):
+                    edge.player_selected = True
+        
+        correct_path[-1].in_path = True
+        
+        self.message = "Caminho BFS correto mostrado em amarelo. Tente replicá-lo!"
+        self.message_color = COLOR_SUCCESS
+        self.player_path = []
+        
+        # CORREÇÃO: Manter o botão VERIFICAR quando tentar novamente
+        if self.state == GameState.PHASE_1_PLAY:
+            self.buttons = [
+                Button(100, 950, 250, 70, "TENTAR EU MESMO",
+                       lambda: self.reset_to_phase1()),
+                Button(380, 950, 250, 70, "NOVO GRAFO",
+                       lambda: self.new_graph()),
+                Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU",
+                       lambda: self.change_state(GameState.MAIN_MENU)),
+            ]
+        elif self.state == GameState.PHASE_2_PLAY:
+            self.buttons = [
+                Button(100, 950, 250, 70, "TENTAR EU MESMO",
+                       lambda: self.reset_to_phase2()),
+                Button(380, 950, 250, 70, "NOVO GRAFO",
+                       lambda: self.new_graph()),
+                Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU",
+                       lambda: self.change_state(GameState.MAIN_MENU)),
+            ]
+    
+    def reset_to_phase1(self):
+        """Reseta para a fase 1 com botões originais"""
+        self.graph.reset()
+        self.player_path = []
+        self.selected_node = None
+        self.message = "Tente encontrar o caminho BFS correto!"
+        self.message_color = COLOR_TEXT
+        
+        # Restaurar botões originais da fase 1
+        self.buttons = [
+            Button(100, 950, 250, 70, "VERIFICAR", 
+                   lambda: self.verify_bfs()),
+            Button(380, 950, 280, 70, "RESETAR CAMINHO", 
+                   lambda: self.reset_current_path()),
+            Button(690, 950, 250, 70, "NOVO GRAFO", 
+                   lambda: self.new_graph()),
+            Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU", 
+                   lambda: self.change_state(GameState.MAIN_MENU)),
+        ]
+        
+        self.show_available_paths()
+    
+    def reset_to_phase2(self):
+        """Reseta para a fase 2 com botões originais"""
+        self.graph.reset()
+        self.player_path = []
+        self.selected_node = None
+        self.message = "Tente encontrar o caminho DFS correto!"
+        self.message_color = COLOR_TEXT
+        
+        # Restaurar botões originais da fase 2
+        self.buttons = [
+            Button(100, 950, 250, 70, "VERIFICAR", 
+                   lambda: self.verify_dfs()),
+            Button(380, 950, 280, 70, "RESETAR CAMINHO", 
+                   lambda: self.reset_current_path()),
+            Button(690, 950, 250, 70, "NOVO GRAFO", 
+                   lambda: self.new_graph()),
+            Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU", 
+                   lambda: self.change_state(GameState.MAIN_MENU)),
+        ]
+        
+        self.show_available_paths()
                 
     def verify_dfs(self):
         """Verificar se o caminho do jogador é um DFS válido"""
@@ -530,10 +805,6 @@ class CyberNexus:
             self.message_color = COLOR_ERROR
             return
         
-        # Para DFS, verificar se o caminho é válido e segue profundidade
-        # Um caminho DFS válido deve ir o mais fundo possível antes de retroceder
-        
-        # Verificar se é um caminho válido
         is_valid = True
         for i in range(len(self.player_path) - 1):
             if self.player_path[i+1] not in self.player_path[i].neighbors:
@@ -545,75 +816,63 @@ class CyberNexus:
             self.message_color = COLOR_ERROR
             return
         
-        # Verificar se não há retrocessos desnecessários (característica do DFS)
-        # Em um DFS, você só deve retroceder quando não há mais vizinhos não visitados
-        visited_in_path = set()
-        valid_dfs = True
-        
-        for i, node in enumerate(self.player_path[:-1]):
-            visited_in_path.add(node)
-            next_node = self.player_path[i + 1]
-            
-            # Verificar se existem vizinhos não visitados que deveriam ser explorados primeiro
-            unvisited_neighbors = [n for n in node.neighbors if n not in visited_in_path and n != next_node]
-            
-            # Se há vizinhos não visitados e o próximo nó não é um deles, pode não ser DFS
-            # Mas permitimos alguma flexibilidade já que DFS pode ter múltiplas soluções válidas
-            
-        # Se chegou ao alvo com um caminho válido, consideramos sucesso
-        self.message = "🎉 SUCESSO! Firewall penetrado! Você executou um DFS válido!"
+        player_path_ids = [str(node.id) for node in self.player_path]
+        self.message = f"🎉 SUCESSO! Firewall penetrado! Caminho DFS: {' → '.join(player_path_ids)}"
         self.message_color = COLOR_SUCCESS
         self.phase2_completed = True
         
-        # Verificar se completou todas as fases
-        if self.phase1_completed and self.phase2_completed:
+        if self.phase1_completed:
             self.buttons = [
-                Button(SCREEN_WIDTH // 2 - 150, 650, 300, 50, "MISSÃO COMPLETA", 
+                Button(100, 950, 280, 70, "CONTINUAR PRATICANDO",
+                       lambda: self.reset_current_path()),
+                Button(410, 950, 250, 70, "NOVO GRAFO",
+                       lambda: self.new_graph()),
+                Button(SCREEN_WIDTH//2 + 50, 950, 350, 70, "MISSÃO COMPLETA", 
                        lambda: self.change_state(GameState.VICTORY)),
             ]
         else:
             self.buttons = [
-                Button(SCREEN_WIDTH // 2 - 150, 650, 300, 50, "VOLTAR AO MENU", 
+                Button(100, 950, 280, 70, "CONTINUAR PRATICANDO",
+                       lambda: self.reset_current_path()),
+                Button(410, 950, 250, 70, "NOVO GRAFO",
+                       lambda: self.new_graph()),
+                Button(SCREEN_WIDTH - 350, 950, 250, 70, "MENU",
                        lambda: self.change_state(GameState.MAIN_MENU)),
             ]
             
     def draw_grid(self):
         """Desenhar grade cyberpunk de fundo"""
-        for x in range(0, SCREEN_WIDTH, 40):
-            pygame.draw.line(self.screen, COLOR_GRID, (x, 0), (x, SCREEN_HEIGHT), 1)
-        for y in range(0, SCREEN_HEIGHT, 40):
-            pygame.draw.line(self.screen, COLOR_GRID, (0, y), (SCREEN_WIDTH, y), 1)
+        for x in range(0, SCREEN_WIDTH, 60):
+            pygame.draw.line(self.screen, COLOR_GRID, (x, 0), (x, SCREEN_HEIGHT), 2)
+        for y in range(0, SCREEN_HEIGHT, 60):
+            pygame.draw.line(self.screen, COLOR_GRID, (0, y), (SCREEN_WIDTH, y), 2)
             
-    def draw_title(self, text, y=80, size=64):
+    def draw_title(self, text, y=120, size=96):
         """Desenhar título"""
         font = pygame.font.Font(None, size)
         title = font.render(text, True, COLOR_TEXT_TITLE)
         title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, y))
         
-        # Efeito de sombra
         shadow = font.render(text, True, (50, 0, 25))
-        shadow_rect = shadow.get_rect(center=(SCREEN_WIDTH // 2 + 3, y + 3))
+        shadow_rect = shadow.get_rect(center=(SCREEN_WIDTH // 2 + 5, y + 5))
         self.screen.blit(shadow, shadow_rect)
         self.screen.blit(title, title_rect)
         
-    def draw_text_box(self, lines, y_start=200, width=900):
+    def draw_text_box(self, lines, y_start=250, width=1200):
         """Desenhar caixa de texto com múltiplas linhas"""
         x = SCREEN_WIDTH // 2 - width // 2
-        line_height = 35
-        padding = 20
+        line_height = 45
+        padding = 30
         
-        # Calcular altura total
         total_height = len(lines) * line_height + padding * 2
         
-        # Desenhar fundo
         bg_rect = pygame.Rect(x, y_start, width, total_height)
         bg_surface = pygame.Surface((width, total_height), pygame.SRCALPHA)
-        pygame.draw.rect(bg_surface, (20, 20, 50, 220), bg_surface.get_rect(), border_radius=10)
-        pygame.draw.rect(bg_surface, COLOR_NODE, bg_surface.get_rect(), 3, border_radius=10)
+        pygame.draw.rect(bg_surface, (20, 20, 50, 220), bg_surface.get_rect(), border_radius=15)
+        pygame.draw.rect(bg_surface, COLOR_NODE, bg_surface.get_rect(), 4, border_radius=15)
         self.screen.blit(bg_surface, (x, y_start))
         
-        # Desenhar texto
-        font = pygame.font.Font(None, 26)
+        font = pygame.font.Font(None, 32)
         y = y_start + padding
         for line in lines:
             text = font.render(line, True, COLOR_TEXT)
@@ -624,38 +883,34 @@ class CyberNexus:
     def draw_message(self):
         """Desenhar mensagem de status"""
         if self.message:
-            font = pygame.font.Font(None, 28)
+            font = pygame.font.Font(None, 36)
             text = font.render(self.message, True, self.message_color)
-            text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, 100))
+            text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, 150))
             
-            # Fundo semi-transparente
-            bg_rect = text_rect.inflate(30, 15)
+            bg_rect = text_rect.inflate(40, 20)
             bg_surface = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(bg_surface, (0, 0, 0, 200), bg_surface.get_rect(), border_radius=8)
+            pygame.draw.rect(bg_surface, (0, 0, 0, 200), bg_surface.get_rect(), border_radius=10)
             self.screen.blit(bg_surface, bg_rect)
             
             self.screen.blit(text, text_rect)
             
     def draw_legend(self):
-        """Desenhar legenda de cores"""
-        panel_x = 1000
-        panel_y = 30
-        panel_width = 250
-        panel_height = 220
+        """Desenhar legenda de cores e informações do grafo"""
+        panel_x = 1550
+        panel_y = 50
+        panel_width = 320
+        panel_height = 250
         
-        # Fundo do painel
         panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
-        pygame.draw.rect(panel_surface, (10, 10, 30, 220), panel_surface.get_rect(), border_radius=10)
-        pygame.draw.rect(panel_surface, COLOR_NODE, panel_surface.get_rect(), 2, border_radius=10)
+        pygame.draw.rect(panel_surface, (10, 10, 30, 220), panel_surface.get_rect(), border_radius=15)
+        pygame.draw.rect(panel_surface, COLOR_NODE, panel_surface.get_rect(), 3, border_radius=15)
         self.screen.blit(panel_surface, (panel_x, panel_y))
         
-        # Título
-        font_title = pygame.font.Font(None, 28)
+        font_title = pygame.font.Font(None, 36)
         title = font_title.render("LEGENDA", True, COLOR_TEXT_TITLE)
-        self.screen.blit(title, (panel_x + 20, panel_y + 15))
+        self.screen.blit(title, (panel_x + 30, panel_y + 20))
         
-        # Itens da legenda
-        font_text = pygame.font.Font(None, 22)
+        font_text = pygame.font.Font(None, 28)
         legend_items = [
             ("Nó Inicial", COLOR_NODE_START),
             ("Nó Normal", COLOR_NODE),
@@ -663,14 +918,27 @@ class CyberNexus:
             ("Nó Alvo", COLOR_NODE_TARGET),
         ]
         
-        y_offset = panel_y + 55
+        y_offset = panel_y + 70
         for label, color in legend_items:
-            pygame.draw.circle(self.screen, color, (panel_x + 25, y_offset + 8), 12)
-            pygame.draw.circle(self.screen, (255, 255, 255), (panel_x + 25, y_offset + 8), 12, 2)
+            pygame.draw.circle(self.screen, color, (panel_x + 35, y_offset + 10), 16)
+            pygame.draw.circle(self.screen, (255, 255, 255), (panel_x + 35, y_offset + 10), 16, 3)
             text = font_text.render(label, True, COLOR_TEXT)
-            self.screen.blit(text, (panel_x + 45, y_offset))
-            y_offset += 35
+            self.screen.blit(text, (panel_x + 60, y_offset))
+            y_offset += 40
+    
+        if self.state in [GameState.PHASE_1_PLAY, GameState.PHASE_2_PLAY] and self.graph.nodes:
+            y_offset += 10
             
+            total_degree = sum(len(node.neighbors) for node in self.graph.nodes)
+            avg_degree = total_degree / len(self.graph.nodes)
+            
+            if avg_degree > 3.5:
+                pygame.draw.circle(self.screen, COLOR_SUCCESS, (panel_x + 240, y_offset + 10), 10)
+            elif avg_degree > 2.5:
+                pygame.draw.circle(self.screen, (255, 255, 0), (panel_x + 240, y_offset + 10), 10)
+            else:
+                pygame.draw.circle(self.screen, COLOR_ERROR, (panel_x + 240, y_offset + 10), 10)
+                
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -683,12 +951,10 @@ class CyberNexus:
                     else:
                         self.running = False
             
-            # Processar cliques em nós
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if self.state in [GameState.TUTORIAL_PLAY, GameState.PHASE_1_PLAY, GameState.PHASE_2_PLAY]:
                     self.handle_node_click(event.pos)
             
-            # Processar botões
             for button in self.buttons:
                 button.handle_event(event)
                 
@@ -697,22 +963,20 @@ class CyberNexus:
         self.draw_grid()
         
         if self.state == GameState.MAIN_MENU:
-            self.draw_title("CYBER NEXUS", y=120, size=80)
+            self.draw_title("CYBER NEXUS", y=180, size=120)
             
-            # Subtítulo
-            font = pygame.font.Font(None, 32)
+            font = pygame.font.Font(None, 48)
             subtitle = font.render("Jogo Educacional de Algoritmos de Grafos", True, COLOR_TEXT)
-            subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 200))
+            subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 280))
             self.screen.blit(subtitle, subtitle_rect)
             
-            # Créditos
-            font_small = pygame.font.Font(None, 24)
+            font_small = pygame.font.Font(None, 32)
             credits = font_small.render("Por Pedro Henrique Faria e Caio Leal Granja", True, COLOR_TEXT)
-            credits_rect = credits.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40))
+            credits_rect = credits.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 60))
             self.screen.blit(credits, credits_rect)
             
         elif self.state == GameState.TUTORIAL_INTRO:
-            self.draw_title("TUTORIAL", y=80)
+            self.draw_title("TUTORIAL", y=120)
             
             lines = [
                 "Bem-vindo ao Cyber Nexus!",
@@ -727,7 +991,7 @@ class CyberNexus:
                 "",
                 "Vamos praticar no tutorial!"
             ]
-            self.draw_text_box(lines, y_start=180)
+            self.draw_text_box(lines, y_start=250)
             
         elif self.state == GameState.TUTORIAL_PLAY:
             self.draw_message()
@@ -735,7 +999,7 @@ class CyberNexus:
             self.draw_legend()
             
         elif self.state == GameState.PHASE_1_INTRO:
-            self.draw_title("FASE 1: BUSCA EM LARGURA (BFS)", y=60, size=52)
+            self.draw_title("FASE 1: BUSCA EM LARGURA (BFS)", y=100, size=72)
             
             lines = [
                 "MISSÃO: Hackear o sistema usando BFS",
@@ -753,7 +1017,7 @@ class CyberNexus:
                 "",
                 "Dica: Pense em ondas se expandindo!"
             ]
-            self.draw_text_box(lines, y_start=140, width=1000)
+            self.draw_text_box(lines, y_start=200, width=1300)
             
         elif self.state == GameState.PHASE_1_PLAY:
             self.draw_message()
@@ -761,7 +1025,7 @@ class CyberNexus:
             self.draw_legend()
             
         elif self.state == GameState.PHASE_2_INTRO:
-            self.draw_title("FASE 2: BUSCA EM PROFUNDIDADE (DFS)", y=60, size=52)
+            self.draw_title("FASE 2: BUSCA EM PROFUNDIDADE (DFS)", y=100, size=72)
             
             lines = [
                 "MISSÃO: Penetrar o firewall usando DFS",
@@ -779,7 +1043,7 @@ class CyberNexus:
                 "",
                 "Dica: Pense em explorar um labirinto!"
             ]
-            self.draw_text_box(lines, y_start=140, width=1000)
+            self.draw_text_box(lines, y_start=200, width=1300)
             
         elif self.state == GameState.PHASE_2_PLAY:
             self.draw_message()
@@ -787,7 +1051,7 @@ class CyberNexus:
             self.draw_legend()
             
         elif self.state == GameState.VICTORY:
-            self.draw_title("MISSÃO CUMPRIDA!", y=120, size=72)
+            self.draw_title("MISSÃO CUMPRIDA!", y=180, size=96)
             
             lines = [
                 "🎉 PARABÉNS, HACKER! 🎉",
@@ -802,9 +1066,8 @@ class CyberNexus:
                 "",
                 "O mundo cibernético está ao seu alcance!",
             ]
-            self.draw_text_box(lines, y_start=240, width=900)
+            self.draw_text_box(lines, y_start=350, width=1200)
             
-        # Desenhar botões
         for button in self.buttons:
             button.draw(self.screen)
             
